@@ -9,15 +9,16 @@ import netifaces
 from ansible.module_utils.basic import AnsibleModule
 
 # Globals
-package_to_install = None
-router = None
-user = None
-state = None
-ssh_identity = None
-check_mode = False
+PACKAGE_TO_INSTALL = None
+ROUTER = None
+USER = None
+STATE = None
+SSH_IDENTITY = None
+CHECK_MODE = False
 changed = False
-update = True
-debug = False
+UPDATE = True
+DEBUG = False
+response = {}
 
 
 def get_router(router):
@@ -36,9 +37,9 @@ def get_ssh_key():
     '''
 
     ssh_key = ''
-    if ssh_identity is not None:
-        print("SSH_IDENTITY = {}".format(ssh_identity))
-        ssh_key = paramiko.RSAKey.from_private_key_file(ssh_identity)
+    if SSH_IDENTITY is not None:
+        print("SSH_IDENTITY = {}".format(SSH_IDENTITY))
+        ssh_key = paramiko.RSAKey.from_private_key_file(SSH_IDENTITY)
     else:
         keyfile = '{}/.ssh/id_rsa'.format(str(Path.home()))
         ssh_key = paramiko.RSAKey.from_private_key_file(keyfile)
@@ -49,12 +50,12 @@ def run_command_on_router(command):
     This is a function docstring
     '''
 
-    global router
+    global ROUTER
 
     ssh_key = get_ssh_key()
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(hostname=router, username=user, pkey=ssh_key)
+    ssh.connect(hostname=ROUTER, username=USER, pkey=ssh_key)
 
     _, ssh_stdout, ssh_stderr = ssh.exec_command(command)
 
@@ -68,7 +69,7 @@ def get_package_version():
     This is a function docstring
     '''
 
-    cmd_to_execute = 'opkg status {}'.format(package_to_install)
+    cmd_to_execute = 'opkg status {}'.format(PACKAGE_TO_INSTALL)
     stdout, _ = run_command_on_router(cmd_to_execute)
 
     for line in stdout:
@@ -81,15 +82,15 @@ def main():
     This is a function docstring
     '''
 
-    global package_to_install
-    global router
-    global user
-    global state
-    global ssh_identity
-    global check_mode
+    global PACKAGE_TO_INSTALL
+    global ROUTER
+    global USER
+    global STATE
+    global SSH_IDENTITY
+    global CHECK_MODE
     global changed
-    global update
-    global debug
+    global UPDATE
+    global DEBUG
     global response
 
     module = AnsibleModule(
@@ -108,56 +109,61 @@ def main():
     )
 
     # Parse the parameters, to make the code more readable
-    package_to_install = module.params['pkg']
-    router = get_router(module.params['router'])
-    user = module.params['user']
-    state = module.params['state']
-    ssh_identity = module.params['ssh_identity']
-    check_mode = module.check_mode
+    PACKAGE_TO_INSTALL = module.params['pkg']
+    ROUTER = get_router(module.params['router'])
+    USER = module.params['user']
+    STATE = module.params['state']
+    SSH_IDENTITY = module.params['ssh_identity']
+    CHECK_MODE = module.check_mode
     changed = False
-    update = module.params['refresh']
-    debug = module.params['debug']
+    UPDATE = module.params['refresh']
+    DEBUG = module.params['debug']
 
     response = {}
 
-    if debug:
+    if DEBUG:
         response['module.params'] = module.params
 
-    if update:
+    if UPDATE:
         cmd_to_execute = 'opkg update'
         stdout, _ = run_command_on_router(cmd_to_execute)
 
-    if (state == 'present'):
-        if not check_mode:
+    if STATE == 'present':
+        if not CHECK_MODE:
             # We're not in check mode, so need to actually do it
-            cmd_to_execute = 'opkg install {}'.format(package_to_install)
+            cmd_to_execute = 'opkg install {}'.format(PACKAGE_TO_INSTALL)
             stdout, _ = run_command_on_router(cmd_to_execute)
-            response['reason'] = 'Requested state was {} and {} was either not installed or had an update'.format(
-                state, package_to_install)
+            response['reason'] = \
+                'Requested state was {} and {} was either not installed or had an update' \
+                .format(STATE, PACKAGE_TO_INSTALL)
             response['stdout_lines'] = stdout
             changed = True
         else:
-            response['reason'] = 'Requested state was {} and {} was either not installed or had an update, but wasn\'t installed because check mode is enabled'.format(
-                state, package_to_install)
+            response['reason'] = \
+                'Requested state was {} and {} was either not installed or had an update, but \
+                    wasn\'t installed because check mode is enabled'.format(
+                STATE, PACKAGE_TO_INSTALL)
     else:
         # State should be absent, so check if the package is installed and remove it
-        if not check_mode:
+        if not CHECK_MODE:
             # The package is installed
-            cmd_to_execute = 'opkg remove {}'.format(package_to_install)
+            cmd_to_execute = 'opkg remove {}'.format(PACKAGE_TO_INSTALL)
             stdout, _ = run_command_on_router(cmd_to_execute)
             response['reason'] = 'Requested state was {}, so {} was removed'.format(
-                state, package_to_install)
+                STATE, PACKAGE_TO_INSTALL)
             response['stdout_lines'] = stdout
             if stdout[0].startswith('Refusing to remove essential package'):
                 module.fail_json(msg=stdout[0], meta=response)
             changed = True
             if stdout[0] == "No packages removed.":
-                response['reason'] = 'Requested state was {}, but {} wasn\'t installed so no action was taken'.format(
-                    state, package_to_install)
+                response['reason'] = \
+                    'Requested state was {}, but {} wasn\'t installed so no action was taken'\
+                        .format(STATE, PACKAGE_TO_INSTALL)
                 changed = False
         else:
-            response['reason'] = 'Requested state was {}, but check mode is enabled so {} was not removed'.format(
-                state, package_to_install)
+            response['reason'] = \
+                'Requested state was {}, but check mode is enabled so {} was not removed'.format(
+                STATE, PACKAGE_TO_INSTALL)
 
     module.exit_json(changed=changed, meta=response)
 
