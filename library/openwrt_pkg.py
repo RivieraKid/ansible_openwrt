@@ -77,6 +77,15 @@ def get_package_version():
             return line.split(' ')[1]
     return None
 
+def add_standard_debug_response(params):
+    if DEBUG:
+        response['module.params'] = params
+
+def update_package_list():
+    if UPDATE:
+        cmd_to_execute = 'opkg update'
+        _, _ = run_command_on_router(cmd_to_execute)
+
 def main():
     '''
     This is a function docstring
@@ -121,12 +130,9 @@ def main():
 
     response = {}
 
-    if DEBUG:
-        response['module.params'] = module.params
+    add_standard_debug_response(module.params)
 
-    if UPDATE:
-        cmd_to_execute = 'opkg update'
-        stdout, _ = run_command_on_router(cmd_to_execute)
+    update_package_list()
 
     if STATE == 'present':
         if not CHECK_MODE:
